@@ -1,2 +1,3 @@
 # sync-database
-Keepass 1.x/2.x Databases Merging script
+
+Keepass databases syncing script to ssh servers
