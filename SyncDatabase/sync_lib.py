@@ -37,7 +37,9 @@ def run_command(client, command, consume_output=False, **kwargs):
             print('['+host+']'+' <stderr> : '+line)
     return output
 
-def connectClientToJoinableHosts(hosts, hosts_config):
+def connectClientToJoinableHosts(hosts,
+                                hosts_config,
+                                debug):
     client = ParallelSSHClient(hosts,
             host_config=hosts_config,
             num_retries=1,

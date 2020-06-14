@@ -1,32 +1,28 @@
-from pssh.clients.native import ParallelSSHClient
-import gevent
-from pprint import pprint
-import tempfile
-import os
-import tarfile
-from subprocess import call
+import click
+from json import load
+from os import makedirs, environ
 from os.path import splitext, isfile, isdir, join
 from SyncDatabase.sync_lib import *
+import tempfile
 
+@click.command()
+@click.option('-d', '--debug', is_flag=True)
 def cli(debug=True):
-    hosts_config = {
-        'SCOTT-host-pi': {
-            'user': 'pi',
-            'port': 817,
-        },
-        'HP-PAPA': {
-            'user': 'hpatrick',
-            'port': 817,
-        },
-        'NEAL-PC': {
-            'user': 'scott',
-            'port': 817,
-        },
-    }
+
+    config_file = environ['HOME']+'/.config/sync-database.conf'
+
+    assert isfile(config_file)
+
+    config = load(open(config_file, 'r'))
+
+    hosts_config = config['hosts']
+
     hosts = hosts_config.keys()
 
     joinableClient,hosts_database_files,hosts_config,hosts = \
-        connectClientToJoinableHosts(hosts, hosts_config)
+        connectClientToJoinableHosts(hosts,
+                                    hosts_config,
+                                    debug)
     if debug:
         print('Joinable hosts : ',hosts_config)
     else:
@@ -51,7 +47,7 @@ def cli(debug=True):
 
         # Creating database dirs
         for directory in map(lambda db_file: tmp+'/'+db_file, database_dirs):
-            os.makedirs(directory)
+            makedirs(directory)
 
         # Moving fetched databases to their correspond temporary directories
         database_dirs_files_counter = dict([(db_file,0) for db_file in database_dirs])
