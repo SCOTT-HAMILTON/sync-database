@@ -15,33 +15,40 @@ def cli(debug=True):
 
     config = load(open(config_file, 'r'))
 
+    if debug:
+        print("config : ",config)
+
     hosts_config = config['hosts']
 
     hosts = hosts_config.keys()
 
-    joinableClient,hosts_database_files,hosts_config,hosts = \
-        connectClientToJoinableHosts(hosts,
-                                    hosts_config,
+    databaseSyncher = DatabaseSyncher(config['passwords_directory'],
+                                    config['backup_history_directory'],
                                     debug)
-    if debug:
-        print('Joinable hosts : ',hosts_config)
-    else:
-        print('Joinable hosts : ',hosts)
 
-    run_hosts_setup_commands(joinableClient)
+    joinableClient,hosts_database_files,hosts_config,hosts = \
+        databaseSyncher.connectClientToJoinableHosts(hosts,
+                                    hosts_config)
+    if debug:
+        print('Joinable hosts : ', hosts_config)
+    else:
+        print('Joinable hosts : ', hosts)
+
+    databaseSyncher.run_hosts_setup_commands(joinableClient)
 
     with tempfile.TemporaryDirectory() as tmp:
+
+        databaseSyncher.set_temporary_directory(tmp)
+
         # Copying password tared files from remote hosts
-        fetch_generated_hosts_tarballs(joinableClient,
-                                        hosts_config,
-                                        tmp,
-                                        debug)
+        databaseSyncher.fetch_generated_hosts_tarballs(joinableClient,
+                                                        hosts_config)
 
         # Cleaning hosts
-        clean_hosts(joinableClient)
+        databaseSyncher.clean_hosts(joinableClient)
 
         # Creating a directory per database
-        database_dirs = get_unique_database_dirs(hosts_database_files)
+        database_dirs = databaseSyncher.get_unique_database_dirs(hosts_database_files)
         if debug:
             print('database directory list : ',database_dirs)
 
@@ -51,50 +58,40 @@ def cli(debug=True):
 
         # Moving fetched databases to their correspond temporary directories
         database_dirs_files_counter = dict([(db_file,0) for db_file in database_dirs])
-        copy_fetched_databases_to_corresponding_tmp_dirs(
+        databaseSyncher.copy_fetched_databases_to_corresponding_tmp_dirs(
                 database_dirs,
                 hosts_config,
-                database_dirs_files_counter,
-                tmp,
-                debug)
+                database_dirs_files_counter)
 
         # Copying local databases to their corresponding temporary directories
-        copy_local_databases_to_corresponding_tmp_dirs(
-                database_dirs_files_counter,
-                tmp,
-                debug)
+        databaseSyncher.copy_local_databases_to_corresponding_tmp_dirs(
+                        database_dirs_files_counter)
 
         # Merging databases
-        successfully_merged_databases = merge_databases(
-                database_dirs_files_counter,
-                tmp,
-                debug)
+        successfully_merged_databases = databaseSyncher.merge_databases(
+                database_dirs_files_counter)
 
         # Copying back the databases to the hosts
-        copy_back_merged_databases_to_hosts(successfully_merged_databases,
+        databaseSyncher.copy_back_merged_databases_to_hosts(successfully_merged_databases,
                                             hosts_config,
-                                            joinableClient,
-                                            tmp,
-                                            debug)
+                                            joinableClient)
 
         # Copying the merged databases to local
-        copy_merged_databases_to_local(successfully_merged_databases)
+        databaseSyncher.copy_merged_databases_to_local(successfully_merged_databases)
 
         # Create Backup tarball of the fetched databases
         from datetime import datetime
         backup_tarball_file = 'backup_'+str(datetime.now())+'.tar.xz'
         if debug:
             print('backup_tarball_file : '+backup_tarball_file)
-        create_fetched_databases_backup_tarball(backup_tarball_file,
-                                                database_dirs_files_counter,
-                                                tmp)
+        databaseSyncher.create_fetched_databases_backup_tarball(
+                                            backup_tarball_file,
+                                            database_dirs_files_counter)
 
         # Copy backup tarball to hosts
-        copy_backup_tarball_to_hosts(backup_tarball_file,
+        databaseSyncher.copy_backup_tarball_to_hosts(backup_tarball_file,
                                     hosts_config,
-                                    joinableClient,
-                                    tmp,
-                                    debug)
+                                    joinableClient)
 
         # Copy backup tarball to local
-        copy_backup_tarball_to_local(backup_tarball_file,tmp)
+        databaseSyncher.copy_backup_tarball_to_local(backup_tarball_file)
