@@ -5,6 +5,7 @@ from os import environ, listdir, makedirs, remove, rename
 from os.path import basename, isfile, isdir, join, splitext
 from pssh.clients.native import ParallelSSHClient
 from shutil import copyfile
+from subprocess import Popen, PIPE
 from tarfile import open as open_tarfile
 
 def print_outputs(outputs):
@@ -37,20 +38,62 @@ def run_command(client, command, consume_output=False, **kwargs):
             print('['+host+']'+' <stderr> : '+line)
     return output
 
+
 class DatabaseSyncher:
 
     def __init__(self,
             passwords_directory,
+            phone_passwords_directory,
             backup_history_directory,
+            phone_backup_history_directory,
+            adb_push_command,
+            adb_pull_command,
             debug):
         self.debug = debug
         self.passwords_directory = passwords_directory
+        self.relative_passwords_directory = passwords_directory[2:]
+        self.phone_passwords_directory = phone_passwords_directory
         self.backup_history_directory = backup_history_directory
-        self.relative_backup_history_directory = self.backup_history_directory[1:]
+        self.phone_backup_history_directory = phone_backup_history_directory
+        self.relative_backup_history_directory = self.backup_history_directory[2:]
+        self.adb_push_command = adb_push_command
+        self.adb_pull_command = adb_pull_command
         if self.debug:
             print("passwords directory : "+self.passwords_directory)
+            print("relative passwords directory : "+self.relative_passwords_directory)
+            print("phone passwords directory : "+self.phone_passwords_directory)
             print("backup history directory : "+self.backup_history_directory)
             print("relative backup history directory : "+self.relative_backup_history_directory)
+            print("phone backup history directory : "+self.phone_backup_history_directory)
+            print("adb push command : ",self.adb_push_command)
+            print("adb pull command : ",self.adb_pull_command)
+
+    def run_phone_command(self, adb_command, source, dest):
+        command = [ ]
+        command.append(adb_command['command'])
+        args_list = adb_command['args'].split(' ')
+
+        for arg in args_list:
+            if arg == '{source}':
+                arg = arg.format(source=source)
+            elif arg == '{dest}':
+                arg = arg.format(dest=dest)
+            command.append(arg)
+        if self.debug:
+            print("adb command : ",command)
+        popen = Popen(command, stdout=PIPE, stderr=PIPE)
+        coms = popen.communicate()
+        if self.debug:
+            # Printing stdout
+            if coms[0]:
+                print(coms[0])
+            # Printing stderr
+            if coms[1]:
+                print(coms[1])
+        if popen.returncode == 0:
+            print('Fetched phone databases')
+        else:
+            print("Couldn't fetch phone databases")
 
     def set_temporary_directory(self, temporary_directory):
         self.temporary_dir = temporary_directory
@@ -152,7 +195,7 @@ class DatabaseSyncher:
 
     def copy_local_databases_to_corresponding_tmp_dirs(self,
                                                     database_dirs_files_counter):
-        local_passwords_dir = environ['HOME']+'/.local/share/passwords'
+        local_passwords_dir = environ['HOME']+'/'+self.relative_passwords_directory
         local_files = [ f for f in listdir(local_passwords_dir)
                             if splitext(f)[1] == '.kdbx'
                               and isfile(join(local_passwords_dir,f))
@@ -163,6 +206,27 @@ class DatabaseSyncher:
             db_file_no_ext = splitext(db_file)[0]
             counter = database_dirs_files_counter[db_file_no_ext]
             copyfile(local_passwords_dir+'/'+db_file,
+                    self.temporary_dir+'/'+db_file_no_ext+'/db_'+str(counter))
+            database_dirs_files_counter[db_file_no_ext] += 1
+
+    def copy_phone_databases_to_corresponding_tmp_dirs(self,
+                                                    database_dirs_files_counter):
+        phone_dir = self.temporary_dir+'/phone'
+        makedirs(phone_dir)
+        self.run_phone_command(
+                    self.adb_pull_command,
+                    source = self.phone_passwords_directory+'/*.kdbx',
+                    dest = phone_dir)
+        phone_files = [ f for f in listdir(phone_dir)
+                            if splitext(f)[1] == '.kdbx'
+                              and isfile(join(phone_dir,f))
+                      ]
+        if self.debug:
+            print("phone databases : ", phone_files)
+        for db_file in phone_files:
+            db_file_no_ext = splitext(db_file)[0]
+            counter = database_dirs_files_counter[db_file_no_ext]
+            copyfile(phone_dir+'/'+db_file,
                     self.temporary_dir+'/'+db_file_no_ext+'/db_'+str(counter))
             database_dirs_files_counter[db_file_no_ext] += 1
 
@@ -193,7 +257,7 @@ class DatabaseSyncher:
         print('Merged databases to send to hosts : '+local_files_to_copy)
         for host,host_datas in hosts_config.items():
             remote_files = ' '.join(map(
-                lambda db: '/home/'+host_datas['user']+'/.local/share/passwords/'+basename(db),
+                lambda db: '/home/'+host_datas['user']+'/'+self.relative_passwords_directory+'/'+basename(db),
                 successfully_merged_databases))
             copy_args.append({
                 'local_file':  local_files_to_copy,
@@ -209,7 +273,16 @@ class DatabaseSyncher:
     def copy_merged_databases_to_local(self,
                                     successfully_merged_databases):
         for db_file in successfully_merged_databases:
-            copyfile(db_file, environ['HOME']+'/.local/share/passwords/'+basename(db_file))
+            copyfile(db_file, environ['HOME']+'/'+self.relative_passwords_directory+'/'+basename(db_file))
+
+    def copy_merged_databases_to_phone(self,
+                                    successfully_merged_databases):
+        for db_file in successfully_merged_databases:
+            self.run_phone_command(
+                        self.adb_push_command,
+                        source = db_file,
+                        dest = self.phone_passwords_directory)
+
 
     def create_fetched_databases_backup_tarball(self,
                                                 backup_tarball_file,
@@ -239,8 +312,14 @@ class DatabaseSyncher:
 
     def copy_backup_tarball_to_local(self,
                                     backup_tarball_file):
-        local_backup_history_dir = environ['HOME']+'/.local/share/passwords/history_backup'
+        local_backup_history_dir = environ['HOME']+'/'+self.relative_backup_history_directory
         if not isdir(local_backup_history_dir):
             os.makedirs(local_backup_history_dir)
         copyfile(self.temporary_dir+'/'+backup_tarball_file, local_backup_history_dir+'/'+backup_tarball_file)
 
+    def copy_backup_tarball_to_phone(self,
+                                    backup_tarball_file):
+        self.run_phone_command(
+                self.adb_push_command,
+                source = self.temporary_dir+'/'+backup_tarball_file,
+                dest = self.phone_backup_history_directory)

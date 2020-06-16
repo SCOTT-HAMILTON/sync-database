@@ -10,21 +10,20 @@ import tempfile
 def cli(debug=True):
 
     config_file = environ['HOME']+'/.config/sync-database.conf'
-
     assert isfile(config_file)
-
     config = load(open(config_file, 'r'))
-
     if debug:
         print("config : ",config)
-
     hosts_config = config['hosts']
-
     hosts = hosts_config.keys()
-
-    databaseSyncher = DatabaseSyncher(config['passwords_directory'],
-                                    config['backup_history_directory'],
-                                    debug)
+    databaseSyncher = DatabaseSyncher(
+                                      config['passwords_directory'],
+                                      config['phone_passwords_directory'],
+                                      config['backup_history_directory'],
+                                      config['phone_backup_history_directory'],
+                                      config['adb_push_command'],
+                                      config['adb_pull_command'],
+                                      debug)
 
     joinableClient,hosts_database_files,hosts_config,hosts = \
         databaseSyncher.connectClientToJoinableHosts(hosts,
@@ -33,17 +32,21 @@ def cli(debug=True):
         print('Joinable hosts : ', hosts_config)
     else:
         print('Joinable hosts : ', hosts)
-
     databaseSyncher.run_hosts_setup_commands(joinableClient)
 
     with tempfile.TemporaryDirectory() as tmp:
 
         databaseSyncher.set_temporary_directory(tmp)
 
+                    ###################################
+                    #                                 #
+                    #            FETCHING             #
+                    #                                 #
+                    ###################################
+
         # Copying password tared files from remote hosts
         databaseSyncher.fetch_generated_hosts_tarballs(joinableClient,
                                                         hosts_config)
-
         # Cleaning hosts
         databaseSyncher.clean_hosts(joinableClient)
 
@@ -67,9 +70,28 @@ def cli(debug=True):
         databaseSyncher.copy_local_databases_to_corresponding_tmp_dirs(
                         database_dirs_files_counter)
 
+        # Copying phone databases to their corresponding temporary directories
+        databaseSyncher.copy_phone_databases_to_corresponding_tmp_dirs(
+                        database_dirs_files_counter)
+
+                    ###################################
+                    #                                 #
+                    #            MERGING              #
+                    #                                 #
+                    ###################################
+
         # Merging databases
         successfully_merged_databases = databaseSyncher.merge_databases(
                 database_dirs_files_counter)
+        if len(successfully_merged_databases) == 0:
+            print("0 database successfully merged, exitting.")
+            exit(1)
+
+                    ###################################
+                    #                                 #
+                    #        SENDING BACK             #
+                    #                                 #
+                    ###################################
 
         # Copying back the databases to the hosts
         databaseSyncher.copy_back_merged_databases_to_hosts(successfully_merged_databases,
@@ -79,9 +101,13 @@ def cli(debug=True):
         # Copying the merged databases to local
         databaseSyncher.copy_merged_databases_to_local(successfully_merged_databases)
 
+        # Copying the merged databases to phone
+        databaseSyncher.copy_merged_databases_to_phone(successfully_merged_databases)
+
         # Create Backup tarball of the fetched databases
         from datetime import datetime
-        backup_tarball_file = 'backup_'+str(datetime.now())+'.tar.xz'
+        # replaces some characters because of adb-sync bug
+        backup_tarball_file = 'backup_'+str(datetime.now().isoformat().replace(':','_').replace('.', '-'))+'.tar.xz'
         if debug:
             print('backup_tarball_file : '+backup_tarball_file)
         databaseSyncher.create_fetched_databases_backup_tarball(
@@ -95,3 +121,6 @@ def cli(debug=True):
 
         # Copy backup tarball to local
         databaseSyncher.copy_backup_tarball_to_local(backup_tarball_file)
+
+        # Copy backup tarball to phone
+        databaseSyncher.copy_backup_tarball_to_phone(backup_tarball_file)
