@@ -252,23 +252,21 @@ class DatabaseSyncher:
                                             successfully_merged_databases,
                                             hosts_config,
                                             client):
-        copy_args = []
-        local_files_to_copy = ' '.join(successfully_merged_databases)
-        print('Merged databases to send to hosts : '+local_files_to_copy)
-        for host,host_datas in hosts_config.items():
-            remote_files = ' '.join(map(
-                lambda db: '/home/'+host_datas['user']+'/'+self.relative_passwords_directory+'/'+basename(db),
-                successfully_merged_databases))
-            copy_args.append({
-                'local_file':  local_files_to_copy,
-                'remote_file': remote_files,
-            })
-        if self.debug:
-            print('copy_args : ',copy_args)
-        joinall(client.copy_file(
-            '%(local_file)s',
-            '%(remote_file)s', recurse=True,
-            copy_args=copy_args), raise_error=True)
+        print('Merged databases to send to hosts : ',successfully_merged_databases)
+        for db_file in successfully_merged_databases:
+            copy_args = []
+            for host,host_datas in hosts_config.items():
+                remote_file = '/home/'+host_datas['user']+'/'+self.relative_passwords_directory+'/'+basename(db_file)
+                copy_args.append({
+                    'local_file':  db_file,
+                    'remote_file': remote_file,
+                })
+            if self.debug:
+                print('copy_args : ',copy_args)
+            joinall(client.copy_file(
+                '%(local_file)s',
+                '%(remote_file)s', recurse=True,
+                copy_args=copy_args), raise_error=True)
 
     def copy_merged_databases_to_local(self,
                                     successfully_merged_databases):
