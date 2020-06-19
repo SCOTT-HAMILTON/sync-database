@@ -25,7 +25,7 @@ def cli(debug=True):
                                       config['adb_pull_command'],
                                       debug)
 
-    joinableClient,hosts_database_files,hosts_config,hosts = \
+    joinableClient,host_database_files_result,hosts_config,hosts = \
         databaseSyncher.connectClientToJoinableHosts(hosts,
                                     hosts_config)
     if debug:
@@ -50,8 +50,25 @@ def cli(debug=True):
         # Cleaning hosts
         databaseSyncher.clean_hosts(joinableClient)
 
+        host_database_files = []
+        for output in host_database_files_result.values():
+            for line in output.stdout:
+                host_database_files.append(line)
+        if debug:
+            print('host database file list : ',host_database_files)
+
+        # Add local databases to hosts database files
+        local_database_files = databaseSyncher.get_local_database_files()
+
+        if debug:
+            print('local database file list : ',local_database_files)
+
+        database_files = host_database_files + local_database_files
+
+        assert len(database_files) > 0
+
         # Creating a directory per database
-        database_dirs = databaseSyncher.get_unique_database_dirs(hosts_database_files)
+        database_dirs = databaseSyncher.get_unique_database_dirs(database_files)
         if debug:
             print('database directory list : ',database_dirs)
 

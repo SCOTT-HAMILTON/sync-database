@@ -164,13 +164,18 @@ class DatabaseSyncher:
     def clean_hosts(self, client):
         run_command(client, 'rm -rf ~/passwords.tar.gz', consume_output=True)
 
-    def get_unique_database_dirs(self, hosts_database_files):
-        reduce_list_of_list = lambda l: reduce(lambda l1,l2: list(l1)+list(l2), l )
-        unclean_databases_list = [ output.stdout for host,output in hosts_database_files.items() ]
+    def get_local_database_files(self):
+        local_passwords_dir = environ['HOME']+'/'+self.relative_passwords_directory
+        local_files = [ f for f in listdir(local_passwords_dir)
+                            if splitext(f)[1] == '.kdbx'
+                              and isfile(join(local_passwords_dir,f))
+                      ]
+        return local_files
 
+    def get_unique_database_dirs(self, database_files):
         # Cleaning the database and removing duplicates to finally get a list of relative directories
         database_dirs = list(OrderedDict.fromkeys(
-            reduce_list_of_list(unclean_databases_list)))
+            database_files))
         database_dirs = list(map(lambda db_file: splitext(db_file)[0], database_dirs))
         return database_dirs
 
