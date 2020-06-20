@@ -1,5 +1,7 @@
 # sync-database
 
+![Travis CI build status](https://travis-ci.org/SCOTT-HAMILTON/sync-database.svg?branch=master)
+
 Keepass databases 1.x/2.x management utility to synchronize them
 accross ssh servers and phones
 
