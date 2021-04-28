@@ -1,20 +1,18 @@
 # sync-database
 
-![Travis CI build status](https://travis-ci.org/SCOTT-HAMILTON/sync-database.svg?branch=master)
-
 Keepass databases 1.x/2.x management utility to synchronize them
 accross ssh servers and phones
 
-# Building
+## Building
 
 This project is configured for setuptools
 
-# How does it work
+## How does it work
 
 The script can be dissected in three parts :
- 1. Fetching the database files
- 2. Merging them together
- 3. Sending them back, (and sending a backup archive of the fetched databases)
+1. Fetching the database files
+2. Merging them together
+3. Sending them back, (and sending a backup archive of the fetched databases)
 
  - The first step fetches required databases from ssh servers, localhost and
  soon phone. Each configured server suitable for ssh should have its
@@ -70,27 +68,78 @@ and merge	user@B:~/.local/share/passwords/FamilyDB.kdbx
  You have probably recognized the default python string format for datetime objects.
  This archive is copied to location `~/.local/share/passwords/history_backup` of all servers and localhost.
 
-# Usage
-```bash
+## Usage
+```shell_session
 $ sync_database
 ```
 
-### Requirements
+## Configuration
+Copy and edit this to `~/.config/sync-database.conf` :
+```json
+{
+    "adb_pull_command": {
+        "args": "-R {source} {dest}",
+        "command": "adb-sync"
+    },
+    "adb_push_command": {
+        "args": "{source} {dest}",
+        "command": "adb-sync"
+    },
+    "hosts": {
+        "213.119.171.157": {
+            "port": 22,
+            "user": "myuser"
+        },
+        "MY-LAPTOP": {
+            "port": 22,
+            "user": "mylaptopuser"
+        }
+    },
+    "backup_history_directory": "~/.local/share/passwords/history_backup",
+    "passwords_directory": "~/.local/share/passwords",
+    "phone_backup_history_directory": "/storage/sdcard1/passwords/history_backup",
+    "phone_passwords_directory": "/storage/sdcard1/passwords"
+}
+```
+**adb_pull_command**.*args*: argument format string to pass to **adb_pull_command**.*command* command.
+`{source}` and `{dest}` corresponds respectively to the remote file that will be pulled, and the destination file/folder where it will be stored locally.
+I use `adb-sync`, but most of you would like to configure this with the `adb` binary from android-platform-tools like this :
+```json
+"adb_pull_command": {
+	"args": "pull {source} {dest}",
+	"command": "adb"
+},
+"adb_push_command": {
+	"args": "push {source} {dest}",
+	"command": "adb"
+},
+```
+**hosts**.*\<destination\>*: IP or hostname of the host. The same as for the `ping` or `ssh` commands' argument.
+
+**hosts**.**\<destination\>**.*port*: The ssh port that will be used when connecting to this host.
+
+**hosts**.**\<destination\>**.*user*: The ssh user that will be used when connecting to this host.
+
+**backup_history_directory**: Directory where the backup files will be stored. (~ is supported)
+
+**passwords_directory**: Directory where are located the Keepass database files in every host (~ is supported)
+
+**phone_backup_history_directory**: Same as **backup_history_directory** but on your phone. (doesn't support ~)
+
+**phone_passwords_directory**: Same as **passwords_directory**. (doesn't support ~)
+
+## Warning
+The **backup_history_directory** directory is never cleaned up (it's a backup), and is filled up in every hosts (for redundancy) on every call to `sync_database`. Same goes to **phone_backup_history_directory**. Each backup file in this folder is a dated XZ compressed file that contains the Keepass databases of all the hosts+phone that could be fetched when `sync_database` was run. Normally, this shouldn't take a lot of space, mine uses about **3 Mio** of space with **2 hosts** and **a phone** after **51 calls** to `sync_database` (4 syncs per month for 1 year). But that obviously does depend on the size of your database files, on the the number of hosts you sync and on how frequently you sync your databases.
+
+## Requirements
  - [parallel-ssh](https://github.com/ParallelSSH/parallel-ssh)
  - [merge-keepass](https://github.com/SCOTT-HAMILTON/merge-keepass)
- - python3
+ - click
 
-### Help
-
+## Help
 This is just a little project, but feel free to fork, change, extend or correct the code.
 
-### TODO :
- - configuration
- - password configuration
- - phone adb integration
-
-License
-----
+## License
 sync-database is delivered as it is under the well known MIT License
 
 **References that helped**
@@ -99,8 +148,6 @@ sync-database is delivered as it is under the well known MIT License
  - [parallel-ssh documentation] : <http://parallel-ssh.readthedocs.io/en/latest>
 
 [//]: # (These are reference links used in the body of this note and get stripped out when the markdown processor does its job. There is no need to format nicely because it shouldn't be seen. Thanks SO - http://stackoverflow.com/questions/4823468/store-comments-in-markdown-syntax)
-
-
 
    [python3 documentation]: <https://docs.python.org/3>
    [tarfile documentation]: <https://docs.python.org/3/library/tarfile.html>
