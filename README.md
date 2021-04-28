@@ -2,7 +2,7 @@
 
 <p align="center">
       <a href="https://scott-hamilton.mit-license.org/"><img alt="MIT License" src="https://img.shields.io/badge/License-MIT-525252.svg?labelColor=292929&logo=creative%20commons&style=for-the-badge" /></a>
-	  <a href="https://github.com/SCOTT-HAMILTON/sync-database/actions"><img alt="Build Status" src="https://img.shields.io/endpoint.svg?url=https%3A%2F%2Factions-badge.atrox.dev%2FSCOTT-HAMILTON%sync-database%2Fbadge&style=for-the-badge" /></a>
+	  <a href="https://github.com/SCOTT-HAMILTON/sync-database/actions"><img alt="Build Status" src="https://img.shields.io/github/workflow/status/SCOTT-HAMILTON/sync-database/CI?logo=github-actions&style=for-the-badge" /></a>
 </p>
 
 Keepass databases 1.x/2.x management utility to synchronize them
