@@ -1,8 +1,9 @@
-# sync-database
+<h1 align="center">sync-database</h1>
 
 <p align="center">
       <a href="https://scott-hamilton.mit-license.org/"><img alt="MIT License" src="https://img.shields.io/badge/License-MIT-525252.svg?labelColor=292929&logo=creative%20commons&style=for-the-badge" /></a>
 	  <a href="https://github.com/SCOTT-HAMILTON/sync-database/actions"><img alt="Build Status" src="https://img.shields.io/github/workflow/status/SCOTT-HAMILTON/sync-database/CI?logo=github-actions&style=for-the-badge" /></a>
+	  <a href="https://www.codacy.com/gh/SCOTT-HAMILTON/sync-database/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=SCOTT-HAMILTON/sync-database&amp;utm_campaign=Badge_Grade"><img alt="Code Quality" src="https://img.shields.io/codacy/grade/e7251769529e4b04bbb4ea94568e1268?logo=codacy&style=for-the-badge" /></a>
 </p>
 
 Keepass databases 1.x/2.x management utility to synchronize them
