@@ -4,13 +4,13 @@ setup(
     version="0.1",
     packages=find_packages(),
     include_package_data=True,
-    py_modules = [ 'sync_database', 'sync_lib' ],
+    py_modules = [ 'cli', 'sync_lib' ],
 
     install_requires=["parallel-ssh", "MergeKeepass"],
 
     entry_points='''
         [console_scripts]
-        sync_database=SyncDatabase.sync_database:cli
+        sync_database=SyncDatabase.cli:cli
     ''',
 
     # metadata to display on PyPI
