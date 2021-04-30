@@ -352,7 +352,7 @@ class DatabaseSyncher:
             self.fetch_generated_hosts_tarballs(joinableClient,
                                                             joinable_hosts_config)
             # Cleaning hosts
-            self.clean_hosts(joinableClient)
+            clean_hosts(joinableClient)
             host_database_files = []
             for output in host_database_files_result.values():
                 for line in output.stdout:
