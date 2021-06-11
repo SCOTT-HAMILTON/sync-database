@@ -6,7 +6,7 @@ setup(
     include_package_data=True,
     py_modules = [ 'cli', 'sync_lib' ],
 
-    install_requires=["parallel-ssh", "MergeKeepass"],
+    install_requires=["setuptools", "parallel-ssh>=2.0", "MergeKeepass"],
 
     entry_points='''
         [console_scripts]

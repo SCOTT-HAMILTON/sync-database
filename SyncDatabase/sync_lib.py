@@ -11,18 +11,18 @@ import getpass
 import tempfile
 
 def run_command(client, command, consume_output=False, **kwargs):
-    output = client.run_command(command, kwargs, stop_on_errors=False,
+    outputs = client.run_command(command, kwargs, stop_on_errors=False,
             timeout=5)
     if consume_output:
-        client.join(output, consume_output=True)
+        client.join(outputs, consume_output=True)
     else:
-        client.join(output)
-    for  host,host_output in output.items():
+        client.join(outputs)
+    for host_output in outputs:
         if host_output.stderr == None:
             continue
         for line in host_output.stderr:
-            print('['+host+']'+' <stderr> : '+line)
-    return output
+            print('['+host_output.host+']'+' <stderr> : '+line)
+    return outputs
 
 def clean_hosts(client):
     run_command(client, 'rm -rf ~/passwords.tar.gz', consume_output=True)
@@ -130,7 +130,7 @@ class DatabaseSyncher:
         outputs = client.run_command('ls '+self.passwords_directory+' | egrep "*.kdbx"',
                 stop_on_errors=False,
                 timeout=3)
-        hosts_databases_files = dict([(host,host_output) for host,host_output in outputs.items() ])
+        hosts_databases_files = dict([(host_output.host,host_output) for host_output in outputs ])
 
         # Filtering unjoinable hosts
         hosts_databases_files = \
