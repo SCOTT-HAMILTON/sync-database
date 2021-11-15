@@ -4,6 +4,7 @@ from gevent import joinall
 from os import environ, listdir, makedirs, remove, rename
 from os.path import basename, splitext, isfile, isdir, join
 from pssh.clients.native import ParallelSSHClient
+from pssh.config import HostConfig
 from shutil import copyfile
 from subprocess import Popen, PIPE
 from tarfile import open as open_tarfile
@@ -12,7 +13,7 @@ import tempfile
 
 def run_command(client, command, consume_output=False, **kwargs):
     outputs = client.run_command(command, kwargs, stop_on_errors=False,
-            timeout=5)
+            read_timeout=10)
     if consume_output:
         client.join(outputs, consume_output=True)
     else:
@@ -34,6 +35,11 @@ def get_unique_database_dirs(database_files):
     database_dirs = list(map(lambda db_file: splitext(db_file)[0], database_dirs))
     return database_dirs
 
+def dict_to_hosts_config(h_dict):
+    result = []
+    for host,config in h_dict.items():
+        result.append(HostConfig(user=config["user"], port=config["port"]))
+    return result
 
 class DatabaseSyncher:
     """DatabaseSyncher Class"""
@@ -69,7 +75,7 @@ class DatabaseSyncher:
             :param debug: enable debugging, default is False
         """
         self.merger = KeepassMerger()
-        self.hosts = hosts_config.keys()
+        self.hosts = list(hosts_config.keys())
         self.hosts_config = hosts_config
         self.debug = debug
         self.passwords_directory = passwords_directory
@@ -122,14 +128,14 @@ class DatabaseSyncher:
 
     def connectClientToJoinableHosts(self):
         client = ParallelSSHClient(self.hosts,
-                host_config=self.hosts_config,
+                host_config=dict_to_hosts_config(self.hosts_config),
                 num_retries=1,
-                timeout=3)
+                timeout=10.0)
         print("Connected")
         print("Launching command...")
         outputs = client.run_command('ls '+self.passwords_directory+' | egrep "*.kdbx"',
                 stop_on_errors=False,
-                timeout=3)
+                read_timeout=10)
         hosts_databases_files = dict([(host_output.host,host_output) for host_output in outputs ])
 
         # Filtering unjoinable hosts
@@ -137,7 +143,7 @@ class DatabaseSyncher:
                 dict(filter(lambda host: host[1].exception == None, hosts_databases_files.items()))
         new_hosts_config = \
                 dict(filter(lambda host: host[0] in hosts_databases_files.keys(), self.hosts_config.items()))
-        new_hosts = new_hosts_config.keys()
+        new_hosts = list(new_hosts_config.keys())
         joinableClient = None
 
         if len(new_hosts_config) < len(self.hosts_config):
@@ -147,9 +153,9 @@ class DatabaseSyncher:
             if self.debug:
                 print(new_hosts)
             joinableClient = ParallelSSHClient(new_hosts,
-                    host_config=new_hosts_config,
+                    host_config=dict_to_hosts_config(new_hosts_config),
                     num_retries=1,
-                    timeout=3)
+                    timeout=10.0)
         else:
             joinableClient = client
         return (joinableClient, hosts_databases_files, new_hosts_config, new_hosts)
