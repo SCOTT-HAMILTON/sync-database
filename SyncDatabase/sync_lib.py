@@ -376,7 +376,9 @@ class DatabaseSyncher:
             if self.debug:
                 print('database directory list : ',database_dirs)
             # Creating database dirs
-            for directory in map(lambda db_file: tmp+'/'+db_file, database_dirs):
+            unique = lambda l: list(set(l))
+            for directory in map(lambda db_file: tmp+'/'+db_file,
+                        unique(database_dirs)):
                 makedirs(directory)
             # Moving fetched databases to their correspond temporary directories
             database_dirs_files_counter = dict([(db_file,0) for db_file in database_dirs])
