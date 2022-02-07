@@ -5,10 +5,11 @@ from os.path import isfile
 import click
 
 @click.command()
+@click.option('-m', '--master-password', default=None)
 @click.option('-d', '--debug', is_flag=True)
-def cli(debug=True):
+def cli(master_password, debug=True):
     config_file = environ['HOME']+'/.config/sync-database.conf'
-    assert isfile(config_file)
+    assert isfile(config_file), f"config file {config_file} doesn't exist."
     config = load(open(config_file, 'r'))
     if debug:
         print("config : ",config)
@@ -20,6 +21,7 @@ def cli(debug=True):
                                       config['phone_backup_history_directory'],
                                       config['adb_push_command'],
                                       config['adb_pull_command'],
+                                      master_password,
                                       debug)
     databaseSyncher.sync()
 

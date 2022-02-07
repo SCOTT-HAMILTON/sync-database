@@ -13,7 +13,7 @@ import tempfile
 
 def run_command(client, command, consume_output=False, **kwargs):
     outputs = client.run_command(command, kwargs, stop_on_errors=False,
-            read_timeout=10)
+            read_timeout=20)
     if consume_output:
         client.join(outputs, consume_output=True)
     else:
@@ -51,6 +51,7 @@ class DatabaseSyncher:
             phone_backup_history_directory,
             adb_push_command,
             adb_pull_command,
+            master_password=None,
             debug=False):
         """For further details, checkout the README.md.
 
@@ -86,6 +87,7 @@ class DatabaseSyncher:
         self.relative_backup_history_directory = self.backup_history_directory[2:]
         self.adb_push_command = adb_push_command
         self.adb_pull_command = adb_pull_command
+        self.master_password = master_password
         if self.debug:
             print("passwords directory : "+self.passwords_directory)
             print("relative passwords directory : "+self.relative_passwords_directory)
@@ -129,13 +131,13 @@ class DatabaseSyncher:
     def connectClientToJoinableHosts(self):
         client = ParallelSSHClient(self.hosts,
                 host_config=dict_to_hosts_config(self.hosts_config),
-                num_retries=1,
-                timeout=10.0)
+                num_retries=2,
+                timeout=20.0)
         print("Connected")
         print("Launching command...")
         outputs = client.run_command('ls '+self.passwords_directory+' | egrep "*.kdbx"',
                 stop_on_errors=False,
-                read_timeout=10)
+                read_timeout=20)
         hosts_databases_files = dict([(host_output.host,host_output) for host_output in outputs ])
 
         # Filtering unjoinable hosts
@@ -154,8 +156,8 @@ class DatabaseSyncher:
                 print(new_hosts)
             joinableClient = ParallelSSHClient(new_hosts,
                     host_config=dict_to_hosts_config(new_hosts_config),
-                    num_retries=1,
-                    timeout=10.0)
+                    num_retries=2,
+                    timeout=20.0)
         else:
             joinableClient = client
         return (joinableClient, hosts_databases_files, new_hosts_config, new_hosts)
@@ -254,7 +256,10 @@ class DatabaseSyncher:
                         database_dirs_files_counter):
         successfully_merged_databases = []
         for db_dir,db_counter in database_dirs_files_counter.items():
-            master_password = getpass.getpass(prompt=f'Password for {db_dir}: ')
+            if self.master_password == None:
+                master_password = getpass.getpass(prompt=f'Password for {db_dir}: ')
+            else:
+                master_password = self.master_password
             db_files = [ self.temporary_dir+'/'+db_dir+'/db_'+str(count) for count in range(db_counter)]
             output_db = self.temporary_dir+'/'+db_dir+'/'+db_dir+'.kdbx'
             if not self.merger.merge_databases(db_files, output_db, master_password,
