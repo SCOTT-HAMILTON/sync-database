@@ -6,8 +6,9 @@ import click
 
 @click.command()
 @click.option('-m', '--master-password', default=None)
+@click.option('-t', '--timeout', default=20)
 @click.option('-d', '--debug', is_flag=True)
-def cli(master_password, debug=True):
+def cli(master_password, timeout, debug=True):
     config_file = environ['HOME']+'/.config/sync-database.conf'
     assert isfile(config_file), f"config file {config_file} doesn't exist."
     config = load(open(config_file, 'r'))
@@ -22,6 +23,7 @@ def cli(master_password, debug=True):
                                       config['adb_push_command'],
                                       config['adb_pull_command'],
                                       master_password,
+                                      timeout,
                                       debug)
     databaseSyncher.sync()
 

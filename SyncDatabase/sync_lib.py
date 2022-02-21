@@ -11,22 +11,6 @@ from tarfile import open as open_tarfile
 import getpass
 import tempfile
 
-def run_command(client, command, consume_output=False, **kwargs):
-    outputs = client.run_command(command, kwargs, stop_on_errors=False,
-            read_timeout=20)
-    if consume_output:
-        client.join(outputs, consume_output=True)
-    else:
-        client.join(outputs)
-    for host_output in outputs:
-        if host_output.stderr == None:
-            continue
-        for line in host_output.stderr:
-            print('['+host_output.host+']'+' <stderr> : '+line)
-    return outputs
-
-def clean_hosts(client):
-    run_command(client, 'rm -rf ~/passwords.tar.gz', consume_output=True)
 
 def get_unique_database_dirs(database_files):
     # Cleaning the database and removing duplicates to finally get a list of relative directories
@@ -52,6 +36,7 @@ class DatabaseSyncher:
             adb_push_command,
             adb_pull_command,
             master_password=None,
+            timeout=20,
             debug=False):
         """For further details, checkout the README.md.
 
@@ -73,6 +58,13 @@ class DatabaseSyncher:
 
             :param adb_push_command: adb configuration for pushing files to the phone
             :param adb_pull_command: adb configuration for pulling files to the phone
+            :param master_password:
+                optional, provide the master password to open all the databases,
+                should be common to all of them.
+            :param timeout:
+                default 20, timeout in seconds for every ssh operations,
+                change if you get timeout issues because of internet issues,
+                useful in CI.
             :param debug: enable debugging, default is False
         """
         self.merger = KeepassMerger()
@@ -88,6 +80,7 @@ class DatabaseSyncher:
         self.adb_push_command = adb_push_command
         self.adb_pull_command = adb_pull_command
         self.master_password = master_password
+        self.timeout = timeout
         if self.debug:
             print("passwords directory : "+self.passwords_directory)
             print("relative passwords directory : "+self.relative_passwords_directory)
@@ -97,6 +90,49 @@ class DatabaseSyncher:
             print("phone backup history directory : "+self.phone_backup_history_directory)
             print("adb push command : ",self.adb_push_command)
             print("adb pull command : ",self.adb_pull_command)
+
+    def run_command(self, client, command, consume_output=False, **kwargs):
+        outputs = client.run_command(command, kwargs, stop_on_errors=False,
+                read_timeout=self.timeout)
+        if consume_output:
+            client.join(outputs, consume_output=True)
+        else:
+            client.join(outputs)
+        for host_output in outputs:
+            if host_output.stderr == None:
+                continue
+            for line in host_output.stderr:
+                print('['+host_output.host+']'+' <stderr> : '+line)
+        return outputs
+
+    def clean_hosts(self, client):
+        self.run_command(client, 'rm -rf ~/passwords.tar.gz', consume_output=True)
+        def run_phone_command(self, adb_command, source, dest):
+            command = [ ]
+            command.append(adb_command['command'])
+            args_list = adb_command['args'].split(' ')
+
+            for arg in args_list:
+                if arg == '{source}':
+                    arg = arg.format(source=source)
+                elif arg == '{dest}':
+                    arg = arg.format(dest=dest)
+                command.append(arg)
+            if self.debug:
+                print("adb command : ",command)
+            popen = Popen(command, stdout=PIPE, stderr=PIPE, shell=False)
+            coms = popen.communicate()
+            if self.debug:
+                # Printing stdout
+                if coms[0]:
+                    print(coms[0])
+                # Printing stderr
+                if coms[1]:
+                    print(coms[1])
+            if popen.returncode == 0:
+                print('Fetched phone databases')
+            else:
+                print("Couldn't fetch phone databases")
 
     def run_phone_command(self, adb_command, source, dest):
         command = [ ]
@@ -132,12 +168,12 @@ class DatabaseSyncher:
         client = ParallelSSHClient(self.hosts,
                 host_config=dict_to_hosts_config(self.hosts_config),
                 num_retries=2,
-                timeout=20.0)
+                timeout=self.timeout)
         print("Connected")
         print("Launching command...")
         outputs = client.run_command('ls '+self.passwords_directory+' | egrep "*.kdbx"',
                 stop_on_errors=False,
-                read_timeout=20)
+                read_timeout=self.timeout)
         hosts_databases_files = dict([(host_output.host,host_output) for host_output in outputs ])
 
         # Filtering unjoinable hosts
@@ -157,19 +193,19 @@ class DatabaseSyncher:
             joinableClient = ParallelSSHClient(new_hosts,
                     host_config=dict_to_hosts_config(new_hosts_config),
                     num_retries=2,
-                    timeout=20.0)
+                    timeout=self.timeout)
         else:
             joinableClient = client
         return (joinableClient, hosts_databases_files, new_hosts_config, new_hosts)
 
     def run_hosts_setup_commands(self,
                                 client):
-        run_command(client, '[ -d  ~/passwords ] && rm -rf ~/passwords', consume_output=True)
-        run_command(client, '[ -f ~/passwords ] && rm -f ~/passwords', consume_output=True)
-        run_command(client, 'mkdir ~/passwords', consume_output=True)
-        run_command(client, 'cp '+self.passwords_directory+'/*.kdbx ~/passwords', consume_output=True)
-        run_command(client, 'cd ~/passwords && tar  cvf ~/passwords.tar.gz *', consume_output=True)
-        run_command(client, 'rm -rf ~/passwords', consume_output=True)
+        self.run_command(client, '[ -d  ~/passwords ] && rm -rf ~/passwords', consume_output=True)
+        self.run_command(client, '[ -f ~/passwords ] && rm -f ~/passwords', consume_output=True)
+        self.run_command(client, 'mkdir ~/passwords', consume_output=True)
+        self.run_command(client, 'cp '+self.passwords_directory+'/*.kdbx ~/passwords', consume_output=True)
+        self.run_command(client, 'cd ~/passwords && tar  cvf ~/passwords.tar.gz *', consume_output=True)
+        self.run_command(client, 'rm -rf ~/passwords', consume_output=True)
 
     def fetch_generated_hosts_tarballs(self,
                                     client,
@@ -316,7 +352,7 @@ class DatabaseSyncher:
                                     backup_tarball_file,
                                     hosts_config,
                                     client):
-        run_command(client,
+        self.run_command(client,
                 '[ ! -d '+self.backup_history_directory+' ] \
                         && mkdir '+self.backup_history_directory,
                     consume_output=True)
@@ -363,7 +399,7 @@ class DatabaseSyncher:
             self.fetch_generated_hosts_tarballs(joinableClient,
                                                             joinable_hosts_config)
             # Cleaning hosts
-            clean_hosts(joinableClient)
+            self.clean_hosts(joinableClient)
             host_database_files = []
             for output in host_database_files_result.values():
                 for line in output.stdout:
