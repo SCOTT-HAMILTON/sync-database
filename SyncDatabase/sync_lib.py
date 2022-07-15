@@ -1,8 +1,9 @@
 from MergeKeepass.keepassmerge import KeepassMerger
 from collections import OrderedDict
 from gevent import joinall
+from glob import glob
 from os import environ, listdir, makedirs, remove, rename
-from os.path import basename, splitext, isfile, isdir, join
+from os.path import basename, splitext, isfile, isdir, join, abspath
 from pssh.clients.native import ParallelSSHClient
 from pssh.config import HostConfig
 from shutil import copyfile
@@ -320,22 +321,22 @@ class DatabaseSyncher:
         makedirs(phone_dir)
         self.run_phone_command(
             self.adb_pull_command,
-            source=self.phone_passwords_directory + "/*.kdbx",
+            source=self.phone_passwords_directory,
             dest=phone_dir,
         )
         phone_files = [
             f
-            for f in listdir(phone_dir)
-            if splitext(f)[1] == ".kdbx" and isfile(join(phone_dir, f))
+            for f in glob(join(phone_dir, "*.kdbx"))
+            if splitext(f)[1] == ".kdbx" and isfile(f)
         ]
         if self.debug:
             print("phone databases : ", phone_files)
         for db_file in phone_files:
-            db_file_no_ext = splitext(db_file)[0]
+            db_file_no_ext = splitext(basename(db_file))[0]
             counter = database_dirs_files_counter[db_file_no_ext]
             copyfile(
-                phone_dir + "/" + db_file,
-                self.temporary_dir + "/" + db_file_no_ext + "/db_" + str(counter),
+                abspath(db_file),
+                join(self.temporary_dir, db_file_no_ext, f"db_{counter}"),
             )
             database_dirs_files_counter[db_file_no_ext] += 1
 
