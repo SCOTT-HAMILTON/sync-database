@@ -3,7 +3,7 @@ from os import environ
 from json import load
 from os.path import isfile
 import click
-
+from pprint import pprint
 
 @click.command()
 @click.option("-m", "--master-password", default=None)
@@ -14,7 +14,8 @@ def cli(master_password, timeout, debug=True):
     assert isfile(config_file), f"config file {config_file} doesn't exist."
     config = load(open(config_file, "r"))
     if debug:
-        print("config : ", config)
+        print("config : ")
+        pprint(config)
     hosts_config = config["hosts"]
     databaseSyncher = DatabaseSyncher(
         hosts_config,

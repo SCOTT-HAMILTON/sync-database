@@ -6,12 +6,11 @@ from os import environ, listdir, makedirs, remove, rename
 from os.path import basename, splitext, isfile, isdir, join, abspath
 from pssh.clients.native import ParallelSSHClient
 from pssh.config import HostConfig
-from shutil import copyfile
+import shutil
 from subprocess import Popen, PIPE
 from tarfile import open as open_tarfile
 import getpass
 import tempfile
-
 
 def get_unique_database_dirs(database_files):
     # Cleaning the database and removing duplicates to finally get a list of relative directories
@@ -87,20 +86,20 @@ class DatabaseSyncher:
         self.master_password = master_password
         self.timeout = timeout
         if self.debug:
-            print("passwords directory : " + self.passwords_directory)
-            print("relative passwords directory : " + self.relative_passwords_directory)
-            print("phone passwords directory : " + self.phone_passwords_directory)
-            print("backup history directory : " + self.backup_history_directory)
+            print("[DEBUG] passwords directory : " + self.passwords_directory)
+            print("[DEBUG] relative passwords directory : " + self.relative_passwords_directory)
+            print("[DEBUG] phone passwords directory : " + self.phone_passwords_directory)
+            print("[DEBUG] backup history directory : " + self.backup_history_directory)
             print(
-                "relative backup history directory : "
+                "[DEBUG] relative backup history directory : "
                 + self.relative_backup_history_directory
             )
             print(
-                "phone backup history directory : "
+                "[DEBUG] phone backup history directory : "
                 + self.phone_backup_history_directory
             )
-            print("adb push command : ", self.adb_push_command)
-            print("adb pull command : ", self.adb_pull_command)
+            print("[DEBUG] adb push command : ", self.adb_push_command)
+            print("[DEBUG] adb pull command : ", self.adb_pull_command)
 
     def run_command(self, client, command, consume_output=False, **kwargs):
         outputs = client.run_command(
@@ -132,7 +131,7 @@ class DatabaseSyncher:
                     arg = arg.format(dest=dest)
                 command.append(arg)
             if self.debug:
-                print("adb command : ", command)
+                print("[DEBUG] adb command : ", command)
             popen = Popen(command, stdout=PIPE, stderr=PIPE, shell=False)
             coms = popen.communicate()
             if self.debug:
@@ -159,7 +158,7 @@ class DatabaseSyncher:
                 arg = arg.format(dest=dest)
             command.append(arg)
         if self.debug:
-            print("adb command : ", command)
+            print("[DEBUG] adb command : ", command)
         popen = Popen(command, stdout=PIPE, stderr=PIPE, shell=False)
         coms = popen.communicate()
         if self.debug:
@@ -174,8 +173,6 @@ class DatabaseSyncher:
         else:
             print("Couldn't fetch phone databases")
 
-    def set_temporary_directory(self, temporary_directory):
-        self.temporary_dir = temporary_directory
 
     def connectClientToJoinableHosts(self):
         client = ParallelSSHClient(
@@ -213,9 +210,9 @@ class DatabaseSyncher:
         if len(new_hosts_config) < len(self.hosts_config):
             print("Reconnected client without unjoinable hosts")
             if self.debug:
-                print(new_hosts_config)
+                print("[DEBUG]", new_hosts_config)
             if self.debug:
-                print(new_hosts)
+                print("[DEBUG]", new_hosts)
             joinableClient = ParallelSSHClient(
                 new_hosts,
                 host_config=dict_to_hosts_config(new_hosts_config),
@@ -258,7 +255,7 @@ class DatabaseSyncher:
                 }
             )
         if self.debug:
-            print("copy_args : ", copy_args)
+            print("[DEBUG] copy_args : ", copy_args)
         joinall(
             client.copy_remote_file(
                 "%(remote_file)s", "%(local_file)s", recurse=True, copy_args=copy_args
@@ -284,7 +281,7 @@ class DatabaseSyncher:
             remove(host_dir + "/passwords.tar.gz")
             db_files = [f for f in listdir(host_dir) if isfile(join(host_dir, f))]
             if self.debug:
-                print(host + " : ", db_files)
+                print("[DEBUG]", host + " : ", db_files)
             for db_file in db_files:
                 db_file_no_ext = splitext(db_file)[0]
                 counter = database_dirs_files_counter[db_file_no_ext]
@@ -304,11 +301,11 @@ class DatabaseSyncher:
             if splitext(f)[1] == ".kdbx" and isfile(join(local_passwords_dir, f))
         ]
         if self.debug:
-            print("local databases : ", local_files)
+            print("[DEBUG] local databases : ", local_files)
         for db_file in local_files:
             db_file_no_ext = splitext(db_file)[0]
             counter = database_dirs_files_counter[db_file_no_ext]
-            copyfile(
+            shutil.copyfile(
                 local_passwords_dir + "/" + db_file,
                 self.temporary_dir + "/" + db_file_no_ext + "/db_" + str(counter),
             )
@@ -317,24 +314,26 @@ class DatabaseSyncher:
     def copy_phone_databases_to_corresponding_tmp_dirs(
         self, database_dirs_files_counter
     ):
-        phone_dir = self.temporary_dir + "/phone"
+        phone_dir = join(self.temporary_dir, "phone")
         makedirs(phone_dir)
         self.run_phone_command(
             self.adb_pull_command,
             source=self.phone_passwords_directory,
             dest=phone_dir,
         )
+        fetched_dir = next(filter(lambda x: isdir(f"{phone_dir}/{x}"), listdir(phone_dir)))
+
         phone_files = [
             f
-            for f in glob(join(phone_dir, "*.kdbx"))
+            for f in glob(join(phone_dir, fetched_dir,"*.kdbx"))
             if splitext(f)[1] == ".kdbx" and isfile(f)
         ]
         if self.debug:
-            print("phone databases : ", phone_files)
+            print("[DEBUG] phone databases : ", phone_files)
         for db_file in phone_files:
             db_file_no_ext = splitext(basename(db_file))[0]
             counter = database_dirs_files_counter[db_file_no_ext]
-            copyfile(
+            shutil.copyfile(
                 abspath(db_file),
                 join(self.temporary_dir, db_file_no_ext, f"db_{counter}"),
             )
@@ -342,6 +341,8 @@ class DatabaseSyncher:
 
     def merge_databases(self, database_dirs_files_counter):
         successfully_merged_databases = []
+        if self.debug:
+            print(f"[DEBUG] number of hosts per database = '{database_dirs_files_counter}'\n")
         for db_dir, db_counter in database_dirs_files_counter.items():
             if self.master_password == None:
                 master_password = getpass.getpass(prompt=f"Password for {db_dir}: ")
@@ -356,7 +357,7 @@ class DatabaseSyncher:
                 db_files, output_db, master_password, continue_on_error=True
             ):
                 if self.debug:
-                    print("Successfully merged", len(db_files), db_dir, "files")
+                    print("[DEBUG] Successfully merged", len(db_files), db_dir, "files")
                 successfully_merged_databases.append(output_db)
             else:
                 print("Not successfully merged ", db_dir, "files")
@@ -384,7 +385,7 @@ class DatabaseSyncher:
                     }
                 )
             if self.debug:
-                print("copy_args : ", copy_args)
+                print("[DEBUG] copy_args : ", copy_args)
             joinall(
                 client.copy_file(
                     "%(local_file)s",
@@ -397,7 +398,7 @@ class DatabaseSyncher:
 
     def copy_merged_databases_to_local(self, successfully_merged_databases):
         for db_file in successfully_merged_databases:
-            copyfile(
+            shutil.copyfile(
                 db_file,
                 environ["HOME"]
                 + "/"
@@ -457,7 +458,7 @@ class DatabaseSyncher:
         )
         if not isdir(local_backup_history_dir):
             makedirs(local_backup_history_dir)
-        copyfile(
+        shutil.copyfile(
             self.temporary_dir + "/" + backup_tarball_file,
             local_backup_history_dir + "/" + backup_tarball_file,
         )
@@ -477,13 +478,15 @@ class DatabaseSyncher:
             joinable_hosts,
         ) = self.connectClientToJoinableHosts()
         if self.debug:
-            print("Joinable hosts : ", joinable_hosts_config)
+            print("[DEBUG] Joinable hosts : ", joinable_hosts_config)
         else:
             print("Joinable hosts : ", joinable_hosts)
         self.run_hosts_setup_commands(joinableClient)
 
         with tempfile.TemporaryDirectory() as tmp:
-            self.set_temporary_directory(tmp)
+            self.temporary_dir = tmp
+            if self.debug:
+                print(f"[DEBUG] Temporary directory: {tmp}")
             ###################################
             #            FETCHING             #
             ###################################
@@ -496,17 +499,17 @@ class DatabaseSyncher:
                 for line in output.stdout:
                     host_database_files.append(line)
             if self.debug:
-                print("host database file list : ", host_database_files)
+                print("[DEBUG] host database file list : ", host_database_files)
             # Add local databases to hosts database files
             local_database_files = self.get_local_database_files()
             if self.debug:
-                print("local database file list : ", local_database_files)
+                print("[DEBUG] local database file list : ", local_database_files)
             database_files = host_database_files + local_database_files
             assert len(database_files) > 0
             # Creating a directory per database
             database_dirs = get_unique_database_dirs(database_files)
             if self.debug:
-                print("database directory list : ", database_dirs)
+                print("[DEBUG] database directory list : ", database_dirs)
             # Creating database dirs
             unique = lambda l: list(set(l))
             for directory in map(
@@ -559,7 +562,7 @@ class DatabaseSyncher:
                 + ".tar.xz"
             )
             if self.debug:
-                print("backup_tarball_file : " + backup_tarball_file)
+                print("[DEBUG] backup_tarball_file : " + backup_tarball_file)
             self.create_fetched_databases_backup_tarball(
                 backup_tarball_file, database_dirs_files_counter
             )
