@@ -220,7 +220,9 @@ class DatabaseSyncher:
         def printHostOutputs(h):
             print("{")
             for k, v in hosts_databases_files.items():
-                print(f"  {k}(exception={v['exception']}, stdout={list(v['stdout'] or [])})")
+                print(
+                    f"  {k}(exception={v['exception']}, stdout={list(v['stdout'] or [])})"
+                )
             print("}")
 
         hosts_databases_files = dict(
