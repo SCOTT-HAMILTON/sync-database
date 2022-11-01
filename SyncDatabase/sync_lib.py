@@ -11,6 +11,10 @@ from subprocess import Popen, PIPE
 from tarfile import open as open_tarfile
 import getpass
 import tempfile
+from pprint import pprint
+from pssh.utils import enable_host_logger
+
+enable_host_logger()
 
 def get_unique_database_dirs(database_files):
     # Cleaning the database and removing duplicates to finally get a list of relative directories
@@ -39,6 +43,7 @@ class DatabaseSyncher:
         adb_push_command,
         adb_pull_command,
         master_password=None,
+        temp_dir=None,
         timeout=20,
         debug=False,
     ):
@@ -65,6 +70,9 @@ class DatabaseSyncher:
         :param master_password:
             optional, provide the master password to open all the databases,
             should be common to all of them.
+        :param temp_dir:
+            optional, provide the temporary dir where transactional files will be stored,
+            if using this option, the given temporary dir won't be destroyed
         :param timeout:
             default 20, timeout in seconds for every ssh operations,
             change if you get timeout issues because of internet issues,
@@ -84,6 +92,7 @@ class DatabaseSyncher:
         self.adb_push_command = adb_push_command
         self.adb_pull_command = adb_pull_command
         self.master_password = master_password
+        self.provided_temporary_dir = temp_dir
         self.timeout = timeout
         if self.debug:
             print("[DEBUG] passwords directory : " + self.passwords_directory)
@@ -100,6 +109,14 @@ class DatabaseSyncher:
             )
             print("[DEBUG] adb push command : ", self.adb_push_command)
             print("[DEBUG] adb pull command : ", self.adb_pull_command)
+
+    def debugPrintLs(self, client):
+        for host in client.run_command(
+            "ls " + self.passwords_directory + ' | egrep "*.kdbx"',
+            stop_on_errors=False,
+            read_timeout=self.timeout):
+            print(f"[DEBUG-LS]\t{host.host}(exception={host.exception}, ls={list(host.stdout)})")
+        print()
 
     def run_command(self, client, command, consume_output=False, **kwargs):
         outputs = client.run_command(
@@ -188,16 +205,31 @@ class DatabaseSyncher:
             stop_on_errors=False,
             read_timeout=self.timeout,
         )
+        def selectKeys(d, keys):
+            return dict((k, d[k]) for k in keys if k in d)
+        def printHostOutputs(h):
+            print("{")
+            for k,v in hosts_databases_files.items():
+                print(f"  {k}(exception={v['exception']}, stdout={list(v['stdout'])})")
+            print("}")
+
         hosts_databases_files = dict(
-            [(host_output.host, host_output) for host_output in outputs]
+            [(host_output.host, {"exception": host_output.exception, "stdout": list(host_output.stdout)})
+             for host_output in outputs]
         )
+        if self.debug:
+            print("[DEBUG] unfiltered host database files:")
+            printHostOutputs(hosts_databases_files)
 
         # Filtering unjoinable hosts
         hosts_databases_files = dict(
             filter(
-                lambda host: host[1].exception == None, hosts_databases_files.items()
+                lambda host: host[1]["exception"] == None, hosts_databases_files.items()
             )
         )
+        if self.debug:
+            print("[DEBUG] filtered host database files:")
+            printHostOutputs(hosts_databases_files)
         new_hosts_config = dict(
             filter(
                 lambda host: host[0] in hosts_databases_files.keys(),
@@ -224,24 +256,19 @@ class DatabaseSyncher:
         return (joinableClient, hosts_databases_files, new_hosts_config, new_hosts)
 
     def run_hosts_setup_commands(self, client):
-        self.run_command(
-            client, "[ -d  ~/passwords ] && rm -rf ~/passwords", consume_output=True
-        )
-        self.run_command(
-            client, "[ -f ~/passwords ] && rm -f ~/passwords", consume_output=True
-        )
-        self.run_command(client, "mkdir ~/passwords", consume_output=True)
+        if self.debug:
+            print("[DEBUG] Setup commands, making passwords.tar.gz files...")
+            print("[DEBUG] LS just before tar")
+            self.debugPrintLs(client)
+
         self.run_command(
             client,
-            "cp " + self.passwords_directory + "/*.kdbx ~/passwords",
+            f"tar cvf ~/passwords.tar.gz -C {self.passwords_directory} $(ls " + self.passwords_directory + ' | egrep "*.kdbx")',
             consume_output=True,
         )
-        self.run_command(
-            client,
-            "cd ~/passwords && tar  cvf ~/passwords.tar.gz *",
-            consume_output=True,
-        )
-        self.run_command(client, "rm -rf ~/passwords", consume_output=True)
+        client.join(consume_output=True)
+        if self.debug:
+            print("[DEBUG] passwords.tar.gz files generated !")
 
     def fetch_generated_hosts_tarballs(self, client, hosts_config):
         copy_args = []
@@ -278,8 +305,8 @@ class DatabaseSyncher:
         for host, _ in hosts_config.items():
             host_dir = self.temporary_dir + "/" + host
             open_tarfile(host_dir + "/passwords.tar.gz").extractall(host_dir)
-            remove(host_dir + "/passwords.tar.gz")
-            db_files = [f for f in listdir(host_dir) if isfile(join(host_dir, f))]
+            # remove(host_dir + "/passwords.tar.gz")
+            db_files = [f for f in listdir(host_dir) if isfile(join(host_dir, f)) and f.endswith(".kdbx")]
             if self.debug:
                 print("[DEBUG]", host + " : ", db_files)
             for db_file in db_files:
@@ -321,7 +348,11 @@ class DatabaseSyncher:
             source=self.phone_passwords_directory,
             dest=phone_dir,
         )
-        fetched_dir = next(filter(lambda x: isdir(f"{phone_dir}/{x}"), listdir(phone_dir)))
+        fetched_dir = ""
+        try:
+            fetched_dir = next(filter(lambda x: isdir(f"{phone_dir}/{x}"), listdir(phone_dir)))
+        except StopIteration:
+            return
 
         phone_files = [
             f
@@ -477,6 +508,8 @@ class DatabaseSyncher:
             joinable_hosts_config,
             joinable_hosts,
         ) = self.connectClientToJoinableHosts()
+        print("[DEBUG] LS just after connectClientToJoinableHosts")
+        self.debugPrintLs(joinableClient)
         if self.debug:
             print("[DEBUG] Joinable hosts : ", joinable_hosts_config)
         else:
@@ -486,7 +519,7 @@ class DatabaseSyncher:
         with tempfile.TemporaryDirectory() as tmp:
             self.temporary_dir = tmp
             if self.debug:
-                print(f"[DEBUG] Temporary directory: {tmp}")
+                print(f"[DEBUG] Generated temporary directory: {self.temporary_dir}")
             ###################################
             #            FETCHING             #
             ###################################
@@ -496,7 +529,7 @@ class DatabaseSyncher:
             self.clean_hosts(joinableClient)
             host_database_files = []
             for output in host_database_files_result.values():
-                for line in output.stdout:
+                for line in output['stdout']:
                     host_database_files.append(line)
             if self.debug:
                 print("[DEBUG] host database file list : ", host_database_files)
@@ -516,7 +549,7 @@ class DatabaseSyncher:
                 lambda db_file: tmp + "/" + db_file, unique(database_dirs)
             ):
                 makedirs(directory)
-            # Moving fetched databases to their correspond temporary directories
+            # Moving fetched databases to their corresponding temporary directories
             database_dirs_files_counter = dict(
                 [(db_file, 0) for db_file in database_dirs]
             )
@@ -574,6 +607,11 @@ class DatabaseSyncher:
             self.copy_backup_tarball_to_local(backup_tarball_file)
             # Copy backup tarball to phone
             self.copy_backup_tarball_to_phone(backup_tarball_file)
+
+            if self.provided_temporary_dir != None:
+                shutil.copytree(tmp, self.provided_temporary_dir)
+                if self.debug:
+                    print("[DEBUG] temp dir saved to " + self.provided_temporary_dir)
 
 
 def print_outputs(outputs):
