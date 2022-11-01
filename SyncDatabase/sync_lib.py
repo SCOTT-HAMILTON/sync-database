@@ -123,7 +123,7 @@ class DatabaseSyncher:
             read_timeout=self.timeout,
         ):
             print(
-                f"[DEBUG-LS]\t{host.host}(exception={host.exception}, ls={list(host.stdout)})"
+                f"[DEBUG-LS]\t{host.host}(exception={host.exception}, ls={list(host.stdout or [])})"
             )
         print()
 
@@ -220,7 +220,7 @@ class DatabaseSyncher:
         def printHostOutputs(h):
             print("{")
             for k, v in hosts_databases_files.items():
-                print(f"  {k}(exception={v['exception']}, stdout={list(v['stdout'])})")
+                print(f"  {k}(exception={v['exception']}, stdout={list(v['stdout'] or [])})")
             print("}")
 
         hosts_databases_files = dict(
@@ -229,7 +229,7 @@ class DatabaseSyncher:
                     host_output.host,
                     {
                         "exception": host_output.exception,
-                        "stdout": list(host_output.stdout),
+                        "stdout": list(host_output.stdout or []),
                     },
                 )
                 for host_output in outputs
@@ -536,8 +536,9 @@ class DatabaseSyncher:
             joinable_hosts_config,
             joinable_hosts,
         ) = self.connectClientToJoinableHosts()
-        print("[DEBUG] LS just after connectClientToJoinableHosts")
-        self.debugPrintLs(joinableClient)
+        if self.debug:
+            print("[DEBUG] LS just after connectClientToJoinableHosts")
+            self.debugPrintLs(joinableClient)
         if self.debug:
             print("[DEBUG] Joinable hosts : ", joinable_hosts_config)
         else:
