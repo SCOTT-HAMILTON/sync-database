@@ -16,6 +16,7 @@ from pssh.utils import enable_host_logger
 
 enable_host_logger()
 
+
 def get_unique_database_dirs(database_files):
     # Cleaning the database and removing duplicates to finally get a list of relative directories
     database_dirs = list(OrderedDict.fromkeys(database_files))
@@ -96,8 +97,13 @@ class DatabaseSyncher:
         self.timeout = timeout
         if self.debug:
             print("[DEBUG] passwords directory : " + self.passwords_directory)
-            print("[DEBUG] relative passwords directory : " + self.relative_passwords_directory)
-            print("[DEBUG] phone passwords directory : " + self.phone_passwords_directory)
+            print(
+                "[DEBUG] relative passwords directory : "
+                + self.relative_passwords_directory
+            )
+            print(
+                "[DEBUG] phone passwords directory : " + self.phone_passwords_directory
+            )
             print("[DEBUG] backup history directory : " + self.backup_history_directory)
             print(
                 "[DEBUG] relative backup history directory : "
@@ -114,8 +120,11 @@ class DatabaseSyncher:
         for host in client.run_command(
             "ls " + self.passwords_directory + ' | egrep "*.kdbx"',
             stop_on_errors=False,
-            read_timeout=self.timeout):
-            print(f"[DEBUG-LS]\t{host.host}(exception={host.exception}, ls={list(host.stdout)})")
+            read_timeout=self.timeout,
+        ):
+            print(
+                f"[DEBUG-LS]\t{host.host}(exception={host.exception}, ls={list(host.stdout)})"
+            )
         print()
 
     def run_command(self, client, command, consume_output=False, **kwargs):
@@ -190,7 +199,6 @@ class DatabaseSyncher:
         else:
             print("Couldn't fetch phone databases")
 
-
     def connectClientToJoinableHosts(self):
         client = ParallelSSHClient(
             self.hosts,
@@ -205,17 +213,27 @@ class DatabaseSyncher:
             stop_on_errors=False,
             read_timeout=self.timeout,
         )
+
         def selectKeys(d, keys):
             return dict((k, d[k]) for k in keys if k in d)
+
         def printHostOutputs(h):
             print("{")
-            for k,v in hosts_databases_files.items():
+            for k, v in hosts_databases_files.items():
                 print(f"  {k}(exception={v['exception']}, stdout={list(v['stdout'])})")
             print("}")
 
         hosts_databases_files = dict(
-            [(host_output.host, {"exception": host_output.exception, "stdout": list(host_output.stdout)})
-             for host_output in outputs]
+            [
+                (
+                    host_output.host,
+                    {
+                        "exception": host_output.exception,
+                        "stdout": list(host_output.stdout),
+                    },
+                )
+                for host_output in outputs
+            ]
         )
         if self.debug:
             print("[DEBUG] unfiltered host database files:")
@@ -263,7 +281,9 @@ class DatabaseSyncher:
 
         self.run_command(
             client,
-            f"tar cvf ~/passwords.tar.gz -C {self.passwords_directory} $(ls " + self.passwords_directory + ' | egrep "*.kdbx")',
+            f"tar cvf ~/passwords.tar.gz -C {self.passwords_directory} $(ls "
+            + self.passwords_directory
+            + ' | egrep "*.kdbx")',
             consume_output=True,
         )
         client.join(consume_output=True)
@@ -306,7 +326,11 @@ class DatabaseSyncher:
             host_dir = self.temporary_dir + "/" + host
             open_tarfile(host_dir + "/passwords.tar.gz").extractall(host_dir)
             # remove(host_dir + "/passwords.tar.gz")
-            db_files = [f for f in listdir(host_dir) if isfile(join(host_dir, f)) and f.endswith(".kdbx")]
+            db_files = [
+                f
+                for f in listdir(host_dir)
+                if isfile(join(host_dir, f)) and f.endswith(".kdbx")
+            ]
             if self.debug:
                 print("[DEBUG]", host + " : ", db_files)
             for db_file in db_files:
@@ -350,13 +374,15 @@ class DatabaseSyncher:
         )
         fetched_dir = ""
         try:
-            fetched_dir = next(filter(lambda x: isdir(f"{phone_dir}/{x}"), listdir(phone_dir)))
+            fetched_dir = next(
+                filter(lambda x: isdir(f"{phone_dir}/{x}"), listdir(phone_dir))
+            )
         except StopIteration:
             return
 
         phone_files = [
             f
-            for f in glob(join(phone_dir, fetched_dir,"*.kdbx"))
+            for f in glob(join(phone_dir, fetched_dir, "*.kdbx"))
             if splitext(f)[1] == ".kdbx" and isfile(f)
         ]
         if self.debug:
@@ -373,7 +399,9 @@ class DatabaseSyncher:
     def merge_databases(self, database_dirs_files_counter):
         successfully_merged_databases = []
         if self.debug:
-            print(f"[DEBUG] number of hosts per database = '{database_dirs_files_counter}'\n")
+            print(
+                f"[DEBUG] number of hosts per database = '{database_dirs_files_counter}'\n"
+            )
         for db_dir, db_counter in database_dirs_files_counter.items():
             if self.master_password == None:
                 master_password = getpass.getpass(prompt=f"Password for {db_dir}: ")
@@ -529,7 +557,7 @@ class DatabaseSyncher:
             self.clean_hosts(joinableClient)
             host_database_files = []
             for output in host_database_files_result.values():
-                for line in output['stdout']:
+                for line in output["stdout"]:
                     host_database_files.append(line)
             if self.debug:
                 print("[DEBUG] host database file list : ", host_database_files)

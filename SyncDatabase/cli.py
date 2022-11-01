@@ -5,6 +5,7 @@ from os.path import isfile
 import click
 from pprint import pprint
 
+
 @click.command()
 @click.option("-k", "--temp-dir", default=None)
 @click.option("-m", "--master-password", default=None)
