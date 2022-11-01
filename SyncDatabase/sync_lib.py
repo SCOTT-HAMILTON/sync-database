@@ -500,7 +500,7 @@ class DatabaseSyncher:
                     "local_file": self.temporary_dir + "/" + backup_tarball_file,
                     "remote_file": "/home/"
                     + host_datas["user"]
-                    + "/.local/share/passwords/history_backup/"
+                    + f"/{self.relative_backup_history_directory}/"
                     + backup_tarball_file,
                 }
             )
