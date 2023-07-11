@@ -1,0 +1,18 @@
+Source: sync-database
+Maintainer: Scott Hamilton <sgn.hamilton+obs@protonmail.com>
+Section: utils
+Priority: optional
+Build-Depends: dh-python,
+               python3,
+               python3-setuptools,
+	       debhelper
+Standards-Version: 4.5.0
+
+Package: python3-sync-database
+Architecture: all
+Depends: ${python3:Depends},
+         ${misc:Depends}
+Description: keepass databases synching script to ssh servers
+	sync-database is a keepass databases synching script
+	that allows one to share common kdbx files across linux computers
+	through ssh and across android devices through adb.

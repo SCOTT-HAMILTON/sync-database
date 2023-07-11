@@ -5,7 +5,6 @@ setup(
     version="0.1",
     packages=find_packages(),
     include_package_data=True,
-    py_modules=["cli", "sync_lib"],
     install_requires=["setuptools", "parallel-ssh>=2.0", "MergeKeepass"],
     entry_points="""
         [console_scripts]
